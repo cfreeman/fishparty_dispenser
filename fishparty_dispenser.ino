@@ -16,41 +16,61 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */ 
-volatile int NbTopsFan; //measuring the rising edges of the signal
-float Calc;    
-float Vol;
-int hallsensor = 2;    //The pin location of the sensor
- 
-//This is the function that the interupt calls 
-void rpm () { 
-  NbTopsFan++;  //This function measures the rising and falling edge of the hall effect sensors signal
-} 
+int NbTopsFan; //measuring the rising edges of the signal
+unsigned long t;  // The last time that volume was measured.
 
-// The setup() method runs once, when the sketch starts
+volatile float Vol;
+
+void updateVol () {
+  unsigned long ct = millis();
+  NbTopsFan++;  //Accumulate the pulses from the hall effect sesnors (rising edge).
+
+  // Every second measure the frequency of the hall effect sensors and calculate change
+  // in volume.
+  
+  // TODO: Change volume calcs to be based off the number of ticks, rather than the time interval that has passed.
+  // This will make algo update faster when flow is faster, and slower when flow is slower. Rather than the fixed
+  // 1second updates at the moment.
+  
+  if (ct > (t + 1000)) {
+    float dV = (NbTopsFan / (0.073f * 60.0f)); // 73Q, = flow rate in L/min
+    Vol += dV;
+
+    NbTopsFan = 0;
+    t = ct;
+  }
+}
+
+float getVol() {
+  float result = 0.0;  
+  cli();
+  result = Vol;
+  sei();  
+
+  return result;
+}
+
+/**
+ * Arduino initalisation.
+ */
 void setup() { 
-  pinMode(hallsensor, INPUT); //initializes digital pin 2 as an input
+  pinMode(2, INPUT); //initializes digital pin 2 as an input
+  attachInterrupt(1, updateVol, RISING); // Sets pin 2 on the Arduino Yun as the interrupt.
+
   Serial.begin(9600); //This is the setup function where the serial port is initialised,
-  attachInterrupt(1, rpm, RISING); //and the interrupt is attached
   Vol = 0.0f;
+  t = millis();
 }
 
-// the loop() method runs over and over again,
-// as long as the Arduino has power
+/**
+ * Main Arduino loop.
+ */
 void loop () {
-  NbTopsFan = 0;   //Set NbTops to 0 ready for calculations
-  sei();      //Enables interrupts
-  delay (1000);   //Wait 1 second
-  cli();      //Disable interrupts
-  Calc = (NbTopsFan / (73.0f * 60.0f)); //(Pulse frequency x 60) / 73Q, = flow rate in L/hour 
-  Vol += (Calc * 1000.0);
-  Serial.print(NbTopsFan, DEC);
-  Serial.print(" ");
-  Serial.print (Calc); //Prints the number calculated above
-  Serial.print(" ");
-  Serial.print(Vol);
-  Serial.print (" ml\r\n"); //Prints "L/hour" and returns a  new line
+  
+  delay(7);
+
+  Serial.print(getVol());
+  Serial.print (" ml\r\n");
+
+  delay(100);
 }
-
-// 18 - 19 L/Hour
-
-// 250ml - 30secs
