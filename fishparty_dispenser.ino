@@ -16,41 +16,76 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */ 
-int NbTopsFan;       // The number of revolutions measured by the hall effect sensor.
-unsigned long t;     // The last time that volume was measured.
-volatile float Vol;  // The total volume measured by the flow sensor.
+#include <Process.h> 
 
-void updateVol () {
+int NbTopsFan;          // The number of revolumeutions measured by the hall effect sensor.
+unsigned long t;        // The last time that volumeume was measured.
+volatile float volume;  // The total volume measured by the flow sensor.
+float total_volume;     // The total volume of the drink dispenser in ml.
+
+
+void updateTankLevel(float current_dispenser_level) {
+  Process p;
+  p.begin("curl");
+  p.addParameter("http://arduino.cc/asciilogo.txt"); // Add the URL parameter to "curl"
+  p.run();
+
+  // TODO: Sort out URL structure of server running on tank (R-Pi).
+
+  // Print arduino logo over the Serial
+  // A process output can be read with the stream methods
+  //while (p.available() > 0) {
+  //  char c = p.read();
+  //  Serial.print(c);
+  //}
+
+  // Ensure the last bit of data is sent.
+  //Serial.flush();
+}
+
+void updatevolume () {
   unsigned long ct = millis();
   NbTopsFan++;  //Accumulate the pulses from the hall effect sesnors (rising edge).
 
   // Every ten spins of the flow sensor, calculate frequency and flow rate.
   if (NbTopsFan > 10) {
     float dV = (NbTopsFan / (0.073f * 60.0f)) * ((ct - t) / 1000.0f); // 73Q = 1L / Minute.
-    Vol += dV;
+    volume += dV;
+    
+    // TODO: Update fishparty_tank of total volume dispensed.
+    // updateTankLevel
 
     NbTopsFan = 0;
     t = ct;
   }
 }
 
-float getVol() {
+float getvolume() {
   cli();
-  float result = Vol;
+  float result = volume;
   sei();  
 
   return result;
+}
+
+void dispenseBeverage() {
+  // TODO: open valve.
+
+  // TODO: While volume less than beverage allocation - keep dispensing.
+  
+  // TODO: close valve.    
 }
 
 /**
  * Arduino initalisation.
  */
 void setup() { 
+  Bridge.begin();                        // Begin the bridge between the two processors on the Yun.
   pinMode(2, INPUT);                     // Initializes digital pin 2 as an input
-  attachInterrupt(1, updateVol, RISING); // Sets pin 2 on the Arduino Yun as the interrupt.
+  attachInterrupt(1, updatevolume, RISING); // Sets pin 2 on the Arduino Yun as the interrupt.
 
   Serial.begin(9600); //This is the setup function where the serial port is initialised,
-  Vol = 0.0f;
+  volume = 0.0f;
   t = millis();
 }
 
@@ -58,8 +93,10 @@ void setup() {
  * Main Arduino loop.
  */
 void loop () {  
-  Serial.print(getVol());
-  Serial.print (" ml\r\n");
+//  Serial.print(getvolume());
+//  Serial.print (" ml\r\n");
+
+  // TODO: If button press detected, dispense beverage.
 
   delay(100);
 }
