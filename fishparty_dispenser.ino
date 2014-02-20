@@ -16,24 +16,17 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */ 
-int NbTopsFan; //measuring the rising edges of the signal
-unsigned long t;  // The last time that volume was measured.
-
-volatile float Vol;
+int NbTopsFan;       // The number of revolutions measured by the hall effect sensor.
+unsigned long t;     // The last time that volume was measured.
+volatile float Vol;  // The total volume measured by the flow sensor.
 
 void updateVol () {
   unsigned long ct = millis();
   NbTopsFan++;  //Accumulate the pulses from the hall effect sesnors (rising edge).
 
-  // Every second measure the frequency of the hall effect sensors and calculate change
-  // in volume.
-  
-  // TODO: Change volume calcs to be based off the number of ticks, rather than the time interval that has passed.
-  // This will make algo update faster when flow is faster, and slower when flow is slower. Rather than the fixed
-  // 1second updates at the moment.
-  
-  if (ct > (t + 1000)) {
-    float dV = (NbTopsFan / (0.073f * 60.0f)); // 73Q, = flow rate in L/min
+  // Every ten spins of the flow sensor, calculate frequency and flow rate.
+  if (NbTopsFan > 10) {
+    float dV = (NbTopsFan / (0.073f * 60.0f)) * ((ct - t) / 1000.0f); // 73Q = 1L / Minute.
     Vol += dV;
 
     NbTopsFan = 0;
@@ -42,9 +35,8 @@ void updateVol () {
 }
 
 float getVol() {
-  float result = 0.0;  
   cli();
-  result = Vol;
+  float result = Vol;
   sei();  
 
   return result;
@@ -54,7 +46,7 @@ float getVol() {
  * Arduino initalisation.
  */
 void setup() { 
-  pinMode(2, INPUT); //initializes digital pin 2 as an input
+  pinMode(2, INPUT);                     // Initializes digital pin 2 as an input
   attachInterrupt(1, updateVol, RISING); // Sets pin 2 on the Arduino Yun as the interrupt.
 
   Serial.begin(9600); //This is the setup function where the serial port is initialised,
@@ -65,10 +57,7 @@ void setup() {
 /**
  * Main Arduino loop.
  */
-void loop () {
-  
-  delay(7);
-
+void loop () {  
   Serial.print(getVol());
   Serial.print (" ml\r\n");
 
