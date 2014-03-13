@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Clinton Freeman 2013
+ * Copyright (c) Clinton Freeman 2014
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
  * associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -15,34 +15,49 @@
  * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */ 
-#include <Process.h> 
+ */
+#define __ASSERT_USE_STDERR
+#include <Process.h>
+#include <assert.h>
 
-int NbTopsFan;          // The number of revolumeutions measured by the hall effect sensor.
-unsigned long t;        // The last time that volumeume was measured.
-volatile float volume;  // The total volume measured by the flow sensor.
-float total_volume;     // The total volume of the drink dispenser in ml.
+int NbTopsFan;                                       // The number of revolumeutions measured by the hall effect sensor.
+unsigned long t;                                     // The last time that volumeume was measured.
+volatile float volume;                               // The total volume measured by the flow sensor. Do not access directly,
+                                                     // use getVolume to fetch the current dispensed volume.
+static float total_volume = 1000.00;                 // The total volume of the drink dispenser in ml.
+char url_buffer[64] = "http://10.1.1.3:8080/0/?l=";  // The URL of the detector/hub.
 
+static const float SERVING_SIZE = 50.0;              // The size of a server in millilitres.
+static const int BUTTON_PIN = 3;                     // The pin that the serving button sits on.
+static const int LED_PIN = 4;                        // The pin that the serve ready LED indicator sits on.
+static const int VALVE_PIN = 5;                      // The pin that the valve for dispensing drinks sits on.
 
+/**
+ * updateTankLevel transmits the current level of the dispenser to teh central detector/hub.
+ *
+ * current_dispenser_level is The current level of this beverage dispenser. 0.0f is empty while
+ * 1.0f is full.
+ */
 void updateTankLevel(float current_dispenser_level) {
+  assert(current_dispenser_level > 0.0f && current_dispenser_level < 1.0f);
+
+  // Spin up a curl process on the atheros processor running linino.
   Process p;
   p.begin("curl");
-  p.addParameter("http://arduino.cc/asciilogo.txt"); // Add the URL parameter to "curl"
+
+  // Write the current level of the drink dispenser to the end of the URL.
+  dtostrf(current_dispenser_level, 5, 5, &url_buffer[26]);
+  p.addParameter(url_buffer); // Add the URL parameter to "curl"
   p.run();
 
-  // TODO: Sort out URL structure of server running on tank (R-Pi).
-
-  // Print arduino logo over the Serial
-  // A process output can be read with the stream methods
-  //while (p.available() > 0) {
-  //  char c = p.read();
-  //  Serial.print(c);
-  //}
-
-  // Ensure the last bit of data is sent.
-  //Serial.flush();
+  // Ignore the output from curl - we don't care about the server response.
 }
 
+/**
+ * Callback method for pin2 interrupt. Updates the total volume that has been drained from
+ * the drink dispenser. This method is called on each 'pulse' of the hall effect sensor in
+ * the flow meter.
+ */
 void updatevolume () {
   unsigned long ct = millis();
   NbTopsFan++;  //Accumulate the pulses from the hall effect sesnors (rising edge).
@@ -51,52 +66,67 @@ void updatevolume () {
   if (NbTopsFan > 10) {
     float dV = (NbTopsFan / (0.073f * 60.0f)) * ((ct - t) / 1000.0f); // 73Q = 1L / Minute.
     volume += dV;
-    
-    // TODO: Update fishparty_tank of total volume dispensed.
-    // updateTankLevel
 
     NbTopsFan = 0;
     t = ct;
   }
 }
 
-float getvolume() {
+/**
+ * Returns the current volume (in ml) that has been poured by this beverage dispenser.
+ */
+float getVolume() {
   cli();
   float result = volume;
-  sei();  
+  sei();
 
   return result;
 }
 
 void dispenseBeverage() {
-  // TODO: open valve.
+  // TODO: Determine beverage allocation. Smaller / less frequence as the dispensers empty?
 
-  // TODO: While volume less than beverage allocation - keep dispensing.
-  
-  // TODO: close valve.    
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(VALVE_PIN, HIGH);
+  digitalWrite(13, HIGH);
+
+  float startVolume = getVolume();
+  while ((getVolume() - startVolume) < SERVING_SIZE) {
+    delay(10);
+  }
+
+  digitalWrite(13, LOW);
+  digitalWrite(VALVE_PIN, LOW);
+  digitalWrite(LED_PIN, HIGH);
+
+  // updateTankLevel(getVolume() / total_volume);
 }
 
 /**
  * Arduino initalisation.
  */
-void setup() { 
-  Bridge.begin();                        // Begin the bridge between the two processors on the Yun.
-  pinMode(2, INPUT);                     // Initializes digital pin 2 as an input
-  attachInterrupt(1, updatevolume, RISING); // Sets pin 2 on the Arduino Yun as the interrupt.
+void setup() {
+  digitalWrite(13, HIGH);
+  Bridge.begin();                            // Begin the bridge between the two processors on the Yun.
+  pinMode(2, INPUT);
+  pinMode(BUTTON_PIN, INPUT);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(VALVE_PIN, OUTPUT);
 
-  Serial.begin(9600); //This is the setup function where the serial port is initialised,
+  attachInterrupt(1, updatevolume, RISING);  // Sets pin 2 on the Arduino Yun as the interrupt.
+
+  Serial.begin(9600);
   volume = 0.0f;
   t = millis();
+  digitalWrite(13, LOW);
+  digitalWrite(LED_PIN, HIGH);               // All powered up - show that we are ready to dispense a drink.
 }
 
 /**
  * Main Arduino loop.
  */
-void loop () {  
-//  Serial.print(getvolume());
-//  Serial.print (" ml\r\n");
-
-  // TODO: If button press detected, dispense beverage.
-
-  delay(100);
+void loop () {
+  if (digitalRead(BUTTON_PIN) == HIGH && digitalRead(LED_PIN) == HIGH) {
+    dispenseBeverage();
+  }
 }
