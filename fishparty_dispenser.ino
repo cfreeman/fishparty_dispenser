@@ -24,9 +24,10 @@ int NbTopsFan;                                       // The number of revolumeut
 unsigned long t;                                     // The last time that volumeume was measured.
 volatile float volume;                               // The total volume measured by the flow sensor. Do not access directly,
                                                      // use getVolume to fetch the current dispensed volume.
-static float total_volume = 1000.00;                 // The total volume of the drink dispenser in ml.
 char url_buffer[64] = "http://10.1.1.3:8080/0/?l=";  // The URL of the detector/hub.
 
+static const float PARTY_DURATION = 10800000.0;      // The minimum duration of the party in milliseconds.
+static const float TOTAL_VOLUME = 12000.00;          // The total volume of the drink dispenser in ml.
 static const float SERVING_SIZE = 50.0;              // The size of a server in millilitres.
 static const int BUTTON_PIN = 3;                     // The pin that the serving button sits on.
 static const int LED_PIN = 4;                        // The pin that the serve ready LED indicator sits on.
@@ -84,8 +85,7 @@ float getVolume() {
 }
 
 void dispenseBeverage() {
-  // TODO: Determine beverage allocation. Smaller / less frequence as the dispensers empty?
-
+  // open the valve and start dispensing the drink.
   digitalWrite(LED_PIN, LOW);
   digitalWrite(VALVE_PIN, HIGH);
   digitalWrite(13, HIGH);
@@ -95,11 +95,11 @@ void dispenseBeverage() {
     delay(10);
   }
 
+  // close the valve and stop dispensing the drink.
   digitalWrite(13, LOW);
   digitalWrite(VALVE_PIN, LOW);
-  digitalWrite(LED_PIN, HIGH);
 
-  // updateTankLevel(getVolume() / total_volume);
+  // updateTankLevel(1.0 - (getVolume() / TOTAL_VOLUME));
 }
 
 /**
@@ -128,5 +128,13 @@ void setup() {
 void loop () {
   if (digitalRead(BUTTON_PIN) == HIGH && digitalRead(LED_PIN) == HIGH) {
     dispenseBeverage();
+  }
+
+  if (digitalRead(LED_PIN) == LOW) {
+      float duration = millis() / PARTY_DURATION;
+
+      if (duration > (getVolume() / TOTAL_VOLUME)) {
+        digitalWrite(LED_PIN, HIGH);
+      }
   }
 }
