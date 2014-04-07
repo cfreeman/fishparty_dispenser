@@ -20,18 +20,31 @@
 #include <Process.h>
 #include <assert.h>
 
-int NbTopsFan;                                       // The number of revolumeutions measured by the hall effect sensor.
-unsigned long t;                                     // The last time that volumeume was measured.
-volatile float volume;                               // The total volume measured by the flow sensor. Do not access directly,
-                                                     // use getVolume to fetch the current dispensed volume.
-char url_buffer[64] = "http://10.1.1.3:8080/0/?l=";  // The URL of the detector/hub.
+int NbTopsFan;                                          // The number of revolutions measured by the hall effect sensor.
+unsigned long t;                                        // The last time that volume was measured.
+volatile float volume;                                  // The total volume measured by the flow sensor.
+                                                        // ** WARNING: ******************************************************************
+                                                        // Do not access directly, use getVolume() to fetch the current dispensed volume.
 
-static const float PARTY_DURATION = 10800000.0;      // The minimum duration of the party in milliseconds.
-static const float TOTAL_VOLUME = 12000.00;          // The total volume of the drink dispenser in ml.
-static const float SERVING_SIZE = 50.0;              // The size of a server in millilitres.
-static const int BUTTON_PIN = 3;                     // The pin that the serving button sits on.
-static const int LED_PIN = 4;                        // The pin that the serve ready LED indicator sits on.
-static const int VALVE_PIN = 5;                      // The pin that the valve for dispensing drinks sits on.
+char url_buffer[64] = "http://192.168.0.1:8080/0/?l=";  // The URL of the detector/hub. -- This is uniquely identfying for each dispenser.
+                                                        // ** WARNING: ******************************************************************
+                                                        // If you make any tweaks to the arduino code, each dispenser needs to be updated
+                                                        // with a different URL:
+                                                        // Dispenser 192.168.0.2 uses url_buffer[64] = "http://192.168.0.1:8080/0/?l=";
+                                                        // Dispenser 192.168.0.3 uses url_buffer[64] = "http://192.168.0.1:8080/1/?l=";
+                                                        // Dispenser 192.168.0.4 uses url_buffer[64] = "http://192.168.0.1:8080/2/?l=";
+                                                        // Dispenser 192.168.0.5 uses url_buffer[64] = "http://192.168.0.1:8080/3/?l=";
+
+static const int SERVING_DELAY = 3000;                  // The number of milliseconds to wait when the valve is opening, and then closing.
+                                                        // I.e. The valve will be open for 3000 milliseconds, before being told to shut.
+                                                        // dispense beverage will then wait another 3000 milliseconds to ensure that the valve
+                                                        // is fully closed.
+
+static const float PARTY_DURATION = 10800000.0;         // The minimum duration of the party in milliseconds.
+static const float TOTAL_VOLUME = 13000.00;             // The total volume of the drink dispenser in ml.
+static const int BUTTON_PIN = 3;                        // The pin that the serving button sits on.
+static const int LED_PIN = 4;                           // The pin that the serve ready LED indicator sits on.
+static const int VALVE_PIN = 5;                         // The pin that the valve for dispensing drinks sits on.
 
 /**
  * updateTankLevel transmits the current level of the dispenser to teh central detector/hub.
@@ -63,9 +76,17 @@ void updatevolume () {
   unsigned long ct = millis();
   NbTopsFan++;  //Accumulate the pulses from the hall effect sesnors (rising edge).
 
+  // If we have not recieved any pulses for the last 500ms, restart the flow calculation.
+  // The valve for the sensor must have been closed.
+  if ((ct - t) > 500) {
+    NbTopsFan = 0;
+    t = ct;
+  }
+
   // Every ten spins of the flow sensor, calculate frequency and flow rate.
-  if (NbTopsFan > 10) {
-    float dV = (NbTopsFan / (0.073f * 60.0f)) * ((ct - t) / 1000.0f); // 73Q = 1L / Minute.
+  if (NbTopsFan > 20) {
+    // Old calibration value: 0.073
+    float dV = (NbTopsFan / (0.01825f * 60.0f)) * ((ct - t) / 1000.0f); // 73Q = 1L / Minute.
     volume += dV;
 
     NbTopsFan = 0;
@@ -85,21 +106,32 @@ float getVolume() {
 }
 
 void dispenseBeverage() {
-  // open the valve and start dispensing the drink.
+  // Open the valve and start dispensing the drink.
+  float startVolume = getVolume();
+  Serial.print("Start: ");
+  Serial.print(startVolume);
+
   digitalWrite(LED_PIN, LOW);
   digitalWrite(VALVE_PIN, HIGH);
   digitalWrite(13, HIGH);
 
-  float startVolume = getVolume();
-  while ((getVolume() - startVolume) < SERVING_SIZE) {
-    delay(10);
-  }
+  // Wait for serve to dispense before closing valve.
+  delay(SERVING_DELAY);
 
-  // close the valve and stop dispensing the drink.
+  // Close the valve and stop dispensing the drink.
   digitalWrite(13, LOW);
   digitalWrite(VALVE_PIN, LOW);
 
-  // updateTankLevel(1.0 - (getVolume() / TOTAL_VOLUME));
+  // Wait for the valve to close.
+  delay(SERVING_DELAY);
+
+  // Wait for the valve to close;
+  Serial.print(" closed: ");
+  Serial.print(getVolume());
+  Serial.print(" Total: ");
+  Serial.println(1.0 - (getVolume() / TOTAL_VOLUME));
+
+  updateTankLevel(1.0 - (getVolume() / TOTAL_VOLUME));
 }
 
 /**
@@ -113,7 +145,7 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   pinMode(VALVE_PIN, OUTPUT);
 
-  attachInterrupt(1, updatevolume, RISING);  // Sets pin 2 on the Arduino Yun as the interrupt.
+  attachInterrupt(1, updatevolume, RISING);  // Sets pin 2 on the Arduino Yun as the interrupt. (from flow meter).
 
   Serial.begin(9600);
   volume = 0.0f;
@@ -126,15 +158,17 @@ void setup() {
  * Main Arduino loop.
  */
 void loop () {
+  // If we are ready to serve, and someone has pushed the drink button - dispense a beverage.
   if (digitalRead(BUTTON_PIN) == HIGH && digitalRead(LED_PIN) == HIGH) {
     dispenseBeverage();
   }
 
+  // If the ready to serve indicator is off - work out if we are ready to serve again.
   if (digitalRead(LED_PIN) == LOW) {
-      float duration = millis() / PARTY_DURATION;
+    float duration = sqrt(millis() / PARTY_DURATION);    // Quadratic beverage dispense rate.
 
-      if (duration > (getVolume() / TOTAL_VOLUME)) {
-        digitalWrite(LED_PIN, HIGH);
-      }
+    if (duration > (getVolume() / TOTAL_VOLUME)) {
+      digitalWrite(LED_PIN, HIGH);
+    }
   }
 }
