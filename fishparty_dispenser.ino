@@ -26,7 +26,7 @@ volatile float volume;                                  // The total volume meas
                                                         // ** WARNING: ******************************************************************
                                                         // Do not access directly, use getVolume() to fetch the current dispensed volume.
 
-char url_buffer[64] = "http://192.168.0.1:8080/0/?l=";  // The URL of the detector/hub. -- This is uniquely identfying for each dispenser.
+char url_buffer[64] = "http://192.168.0.1:8080/1/?l=";  // The URL of the detector/hub. -- This is uniquely identfying for each dispenser.
                                                         // ** WARNING: ******************************************************************
                                                         // If you make any tweaks to the arduino code, each dispenser needs to be updated
                                                         // with a different URL:
@@ -53,7 +53,13 @@ static const int VALVE_PIN = 5;                         // The pin that the valv
  * 1.0f is full.
  */
 void updateTankLevel(float current_dispenser_level) {
-  assert(current_dispenser_level > 0.0f && current_dispenser_level < 1.0f);
+  if (current_dispenser_level < 0.0f) {
+    current_dispenser_level = 0.0f;
+  }
+  
+  if (current_dispenser_level > 1.0f) {
+    current_dispenser_level = 1.0f;
+  }
 
   // Spin up a curl process on the atheros processor running linino.
   Process p;
@@ -61,6 +67,7 @@ void updateTankLevel(float current_dispenser_level) {
 
   // Write the current level of the drink dispenser to the end of the URL.
   dtostrf(current_dispenser_level, 5, 5, &url_buffer[26]);
+  Serial.println(url_buffer);
   p.addParameter(url_buffer); // Add the URL parameter to "curl"
   p.run();
 
@@ -83,7 +90,7 @@ void updatevolume () {
     t = ct;
   }
 
-  // Every ten spins of the flow sensor, calculate frequency and flow rate.
+  // Every twenty spins of the flow sensor, calculate frequency and flow rate.
   if (NbTopsFan > 20) {
     // Old calibration value: 0.073
     float dV = (NbTopsFan / (0.01825f * 60.0f)) * ((ct - t) / 1000.0f); // 73Q = 1L / Minute.
