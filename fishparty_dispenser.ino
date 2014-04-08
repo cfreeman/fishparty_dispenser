@@ -66,7 +66,7 @@ void updateTankLevel(float current_dispenser_level) {
   p.begin("curl");
 
   // Write the current level of the drink dispenser to the end of the URL.
-  dtostrf(current_dispenser_level, 5, 5, &url_buffer[26]);
+  dtostrf(current_dispenser_level, 5, 5, &url_buffer[29]);
   Serial.println(url_buffer);
   p.addParameter(url_buffer); // Add the URL parameter to "curl"
   p.run();
