@@ -26,7 +26,7 @@ volatile float volume;                                  // The total volume meas
                                                         // ** WARNING: ******************************************************************
                                                         // Do not access directly, use getVolume() to fetch the current dispensed volume.
 
-char url_buffer[64] = "http://192.168.0.1:8080/1/?l=";  // The URL of the detector/hub. -- This is uniquely identfying for each dispenser.
+char url_buffer[64] = "http://192.168.0.1:8080/0/?l=";  // The URL of the detector/hub. -- This is uniquely identfying for each dispenser.
                                                         // ** WARNING: ******************************************************************
                                                         // If you make any tweaks to the arduino code, each dispenser needs to be updated
                                                         // with a different URL:
@@ -93,7 +93,7 @@ void updatevolume () {
   // Every twenty spins of the flow sensor, calculate frequency and flow rate.
   if (NbTopsFan > 20) {
     // Old calibration value: 0.073
-    float dV = (NbTopsFan / (0.01825f * 60.0f)) * ((ct - t) / 1000.0f); // 73Q = 1L / Minute.
+    float dV = (NbTopsFan / (0.02433f * 60.0f)) * ((ct - t) / 1000.0f); // 73Q = 1L / Minute.
     volume += dV;
 
     NbTopsFan = 0;
