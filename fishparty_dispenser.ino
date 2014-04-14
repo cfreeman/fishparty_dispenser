@@ -26,7 +26,7 @@ volatile float volume;                                  // The total volume meas
                                                         // ** WARNING: ******************************************************************
                                                         // Do not access directly, use getVolume() to fetch the current dispensed volume.
 
-char url_buffer[64] = "http://192.168.0.1:8080/0/?l=";  // The URL of the detector/hub. -- This is uniquely identfying for each dispenser.
+char url_buffer[64] = "http://192.168.0.1:8080/2/?l=";  // The URL of the detector/hub. -- This is uniquely identfying for each dispenser.
                                                         // ** WARNING: ******************************************************************
                                                         // If you make any tweaks to the arduino code, each dispenser needs to be updated
                                                         // with a different URL:
@@ -35,7 +35,7 @@ char url_buffer[64] = "http://192.168.0.1:8080/0/?l=";  // The URL of the detect
                                                         // Dispenser 192.168.0.4 uses url_buffer[64] = "http://192.168.0.1:8080/2/?l=";
                                                         // Dispenser 192.168.0.5 uses url_buffer[64] = "http://192.168.0.1:8080/3/?l=";
 
-static const int SERVING_DELAY = 3000;                  // The number of milliseconds to wait when the valve is opening, and then closing.
+static const int SERVING_DELAY = 4500;                  // The number of milliseconds to wait when the valve is opening, and then closing.
                                                         // I.e. The valve will be open for 3000 milliseconds, before being told to shut.
                                                         // dispense beverage will then wait another 3000 milliseconds to ensure that the valve
                                                         // is fully closed.
